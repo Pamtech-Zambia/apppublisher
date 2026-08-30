@@ -51,7 +51,7 @@ const handler = createMcpHandler((server) => {
   server.registerTool('play_connector_status', {
     title: 'Google Play Deployment Assistant status',
     description: 'Shows public test mode and safety boundaries.',
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false, destructiveHint: false },
   }, async () => text({
     service: 'Google Play Deployment Assistant',
     version: '0.5.1-test',
@@ -66,7 +66,7 @@ const handler = createMcpHandler((server) => {
     title: 'Validate Play Store listing',
     description: 'Checks baseline metadata lengths and flags claims that require evidence.',
     inputSchema: z.object({ title: z.string(), shortDescription: z.string(), fullDescription: z.string() }),
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false, destructiveHint: false },
   }, async ({ title, shortDescription, fullDescription }) => {
     const errors: string[] = [];
     const warnings: string[] = [];
@@ -84,7 +84,7 @@ const handler = createMcpHandler((server) => {
     title: 'Evaluate Play claims against evidence',
     description: 'Blocks unsupported, contradicted, or prohibited claims from publishable metadata.',
     inputSchema: z.object({ claims: z.array(claimSchema).min(1).max(300) }),
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false, destructiveHint: false },
   }, async ({ claims }) => {
     const evaluated = claims.map((c) => evaluateClaim(c as Claim));
     const blockers = evaluated.filter((c) => c.status === 'CONTRADICTED' || c.status === 'PROHIBITED');
@@ -109,7 +109,7 @@ const handler = createMcpHandler((server) => {
       detectedAnalyticsSdk: z.boolean().optional(),
       requestedSensitivePermissions: z.array(z.string()).optional(),
     }),
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false, destructiveHint: false },
   }, async (facts) => {
     const blockers: string[] = [];
     const requiredInput: string[] = [];
@@ -147,7 +147,7 @@ const handler = createMcpHandler((server) => {
       inferredFeatures: z.array(z.string()).default([]),
       unknowns: z.array(z.string()).default([]),
     }),
-    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+    annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false, destructiveHint: false },
   }, async (facts) => text({
     verifiedFacts: {
       packageName: facts.packageName,
