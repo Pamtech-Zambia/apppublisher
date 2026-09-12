@@ -7,6 +7,8 @@ export async function GET() {
     websiteAndPluginParity: true,
     googlePlayWrites: false,
     truthfulnessGate: true,
+    compiledPackageRuntime: 'same-origin-browser-wasm',
+    serverSidePackageParsing: false,
     capabilities: {
       publicRepositoryInspection: true,
       localSourceZipInspection: true,
