@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from 'react';
 import JSZip from 'jszip';
-import { analyzeSourceFiles, shouldReadAsText, type AnalysisResult } from '../../lib/play-analyzer';
+import { shouldReadAsText, type AnalysisResult } from '../../lib/play-analyzer';
+import { analyzeSourceFilesWithEvidence } from '../../lib/source-evidence';
 import { analyzeParsedAndroid } from '../../lib/android-binary';
 
 type RepoResponse = { repository?:{owner:string;name:string;defaultBranch:string;visibility:string;htmlUrl?:string}; inspectedTextFiles?:number; inspectedTextBytes?:number; result?:AnalysisResult; error?:string };
@@ -29,7 +30,7 @@ async function analyzeLocalArchive(file:File):Promise<AnalysisResult>{
  const files:Record<string,string>={};let total=0,count=0;
  for(const [path,entry] of Object.entries(zip.files)){if(entry.dir||!shouldReadAsText(path)||count>=2500)continue;const bytes=await entry.async('uint8array');if(bytes.byteLength>1024*1024)continue;if(total+bytes.byteLength>25*1024*1024)break;files[path]=new TextDecoder('utf-8',{fatal:false}).decode(bytes);total+=bytes.byteLength;count++;}
  if(!Object.keys(files).length)throw new Error('No readable source/configuration files were found in this ZIP.');
- return analyzeSourceFiles(files,'source-zip');
+ return analyzeSourceFilesWithEvidence(files,'source-zip');
 }
 
 function downloadReport(result: AnalysisResult) {
