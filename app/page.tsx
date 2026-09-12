@@ -1,5 +1,4 @@
-import Analyzer from './components/Analyzer';
-import PluginWorkspace from './components/PluginWorkspace';
+import AssistantApp from './components/AssistantApp';
 
 export default function Page() {
   return <main>
@@ -7,15 +6,14 @@ export default function Page() {
       <div className="heroInner">
         <span className="eyebrow">Google Play Deployment Assistant</span>
         <h1>Prepare your Android app for Google Play from one website.</h1>
-        <p className="heroText">Analyze a public GitHub repository or inspect a local APK, AAB, or source ZIP. The assistant separates verified evidence from assumptions, flags release blockers, identifies missing Play information, and continues into the same listing, creative, Data Safety, policy, rejection, and release workflows exposed by the plugin.</p>
+        <p className="heroText">Analyze a public GitHub repository or inspect a local APK, AAB, or source ZIP. The assistant separates verified evidence from assumptions, flags release blockers, identifies missing Play information, and carries that evidence into the same listing, creative, Data Safety, policy, rejection, and release workflows exposed by the plugin.</p>
         <div className="heroBadges"><span>Evidence-first</span><span>No fake claims</span><span>Website = plugin workflows</span><span>MCP-ready</span></div>
       </div>
     </section>
 
     <section className="contentWrap">
       <div className="truthBanner"><strong>Truthfulness gate:</strong> unsupported, contradicted, or prohibited claims are never treated as publishable Play metadata. If the website cannot prove something, it says so and asks for the missing fact.</div>
-      <Analyzer />
-      <PluginWorkspace />
+      <AssistantApp />
       <section className="howItWorks">
         <h2>What the website and plugin cover</h2>
         <div className="featureGrid">
