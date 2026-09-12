@@ -4,6 +4,7 @@ type Rule = {
   name: string;
   userPhrase: string;
   content: RegExp;
+  implementation?: RegExp;
   requiredPermission?: RegExp;
   requiredSdk?: RegExp;
 };
@@ -11,14 +12,14 @@ type Rule = {
 type ListingPlanWithFull = AnalysisResult['listingPlan'] & { fullDescription?: string };
 
 const featureRules: Rule[] = [
-  { name: 'Translation and dictionary tools', userPhrase: 'translate and look up words or phrases', content: /\b(translat(?:e|ion|or)?|dictionary|word meaning|phrase|proverb)\b/i },
-  { name: 'Search', userPhrase: 'search app content', content: /\b(search|search results|query)\b/i },
-  { name: 'Favorites or bookmarks', userPhrase: 'save favorites or bookmarks', content: /\b(favorites?|favourites?|bookmarks?|saved items?)\b/i },
-  { name: 'User accounts and sign-in', userPhrase: 'sign in to an account', content: /\b(sign in|log in|login|create account|register|authentication|account)\b/i, requiredSdk: /(Firebase Authentication|Google Sign-In)/i },
-  { name: 'In-app purchases or subscriptions', userPhrase: 'access paid purchases or subscriptions', content: /\b(subscription|purchase|premium|upgrade|billing|paywall)\b/i, requiredSdk: /Google Play Billing/i },
-  { name: 'Camera or scanning', userPhrase: 'use camera-based capture or scanning', content: /\b(camera|scan|scanner|barcode|qr code|take photo|capture photo)\b/i, requiredPermission: /android\.permission\.CAMERA/i },
-  { name: 'Location or maps', userPhrase: 'use location or map features', content: /\b(location|map|gps|geofence|nearby)\b/i, requiredPermission: /android\.permission\.(ACCESS_FINE_LOCATION|ACCESS_COARSE_LOCATION|ACCESS_BACKGROUND_LOCATION)/i },
-  { name: 'Notifications', userPhrase: 'receive app notifications', content: /\b(notification|push message|push notification|firebase messaging)\b/i },
+  { name: 'Translation and dictionary tools', userPhrase: 'translate and look up words or phrases', content: /\b(translat(?:e|ion|or)?|dictionary|word meaning|phrase|proverb)\b/i, implementation: /(translate\s*\(|translator|translation|dictionary|lexicon|wordRepository|phraseRepository)/i },
+  { name: 'Search', userPhrase: 'search app content', content: /\b(search|search results|query)\b/i, implementation: /(SearchView|searchQuery|performSearch|filter\s*\(|query\s*\()/i },
+  { name: 'Favorites or bookmarks', userPhrase: 'save favorites or bookmarks', content: /\b(favorites?|favourites?|bookmarks?|saved items?)\b/i, implementation: /(favorite|favourite|bookmark|savedItem|isSaved)/i },
+  { name: 'User accounts and sign-in', userPhrase: 'sign in to an account', content: /\b(sign in|log in|login|create account|register|authentication|account)\b/i, implementation: /(FirebaseAuth|GoogleSignIn|signInWith|createUserWith|AuthCredential|onAuthStateChanged)/i, requiredSdk: /(Firebase Authentication|Google Sign-In)/i },
+  { name: 'In-app purchases or subscriptions', userPhrase: 'access paid purchases or subscriptions', content: /\b(subscription|purchase|premium|upgrade|billing|paywall)\b/i, implementation: /(BillingClient|queryProductDetails|launchBillingFlow|Purchase|ProductDetails)/i, requiredSdk: /Google Play Billing/i },
+  { name: 'Camera or scanning', userPhrase: 'use camera-based capture or scanning', content: /\b(camera|scan|scanner|barcode|qr code|take photo|capture photo)\b/i, implementation: /(ProcessCameraProvider|CameraSelector|ImageCapture|PreviewView|bindToLifecycle|CameraX|BarcodeScanner|QrCode|QRCode)/i, requiredPermission: /android\.permission\.CAMERA/i },
+  { name: 'Location or maps', userPhrase: 'use location or map features', content: /\b(location|map|gps|geofence|nearby)\b/i, implementation: /(FusedLocationProviderClient|LocationManager|requestLocationUpdates|GeofencingClient|GoogleMap|MapView|LatLng)/i, requiredPermission: /android\.permission\.(ACCESS_FINE_LOCATION|ACCESS_COARSE_LOCATION|ACCESS_BACKGROUND_LOCATION)/i },
+  { name: 'Notifications', userPhrase: 'receive app notifications', content: /\b(notification|push message|push notification|firebase messaging)\b/i, implementation: /(NotificationManager|NotificationCompat|FirebaseMessaging|onMessageReceived|createNotificationChannel)/i },
 ];
 
 const sdkPatterns: Array<[string, RegExp]> = [
@@ -108,7 +109,8 @@ function runtimeEndpointEvidence(files: Record<string,string>): { hosts:string[]
 
 function evidenceForRule(files: Record<string,string>, rule: Rule): { hasUi:boolean; hasImpl:boolean; evidence:string[] } {
   const ui = Object.entries(files).filter(([path,text]) => isUserFacingSource(path) && rule.content.test(text));
-  const impl = Object.entries(files).filter(([path,text]) => isProductionCode(path) && rule.content.test(text));
+  const implementationPattern=rule.implementation ?? rule.content;
+  const impl = Object.entries(files).filter(([path,text]) => isProductionCode(path) && implementationPattern.test(text));
   const evidence = [...new Set([...ui.map(([p])=>p), ...impl.map(([p])=>p)])];
   return { hasUi: ui.length > 0, hasImpl: impl.length > 0, evidence:evidence.slice(0,6) };
 }
@@ -135,12 +137,10 @@ export function analyzeSourceFilesWithEvidence(files:Record<string,string>,sourc
   const deps=dependencyText(files);
   const signalText=`${deps}\n${prodText}`;
 
-  // Replace broad README/docs-derived SDK and endpoint signals with production-oriented evidence.
   result.sdkSignals=sdkPatterns.filter(([,re])=>re.test(signalText)).map(([name])=>name);
   const endpoints=runtimeEndpointEvidence(files);
   result.remoteHosts=endpoints.hosts.slice(0,50);
 
-  // Remove broad network/privacy findings/questions produced only from documentation URLs.
   result.findings=result.findings.filter(f=>f.title!=='Privacy disclosure needs verification');
   result.questions=result.questions.filter(q=>!q.startsWith('What user data is sent to each remote service'));
 
@@ -157,15 +157,14 @@ export function analyzeSourceFilesWithEvidence(files:Record<string,string>,sourc
   if(hasAnalytics&&!result.questions.some(q=>q.startsWith('Which analytics')))result.questions.unshift('Which analytics events/user identifiers are collected, retained, or shared in production?');
   if(hasAuth&&!result.questions.some(q=>q.startsWith('Does the app allow account creation')))result.questions.unshift('Does the app allow account creation? If yes, how can users request or perform account deletion?');
 
-  // Rebuild feature hypotheses from production code rather than README/documentation text.
   const inferred:string[]=[];
   if(/\b(translat|dictionary|word meaning|phrase|proverb)\b/i.test(prodText))inferred.push('Translation or dictionary functionality may be present.');
   if(/\b(sign.?in|log.?in|create account|register|authentication)\b/i.test(prodText)||hasAuth)inferred.push('Account authentication/sign-in may be present.');
   if(/\b(subscription|purchase|premium|billingclient|paywall)\b/i.test(prodText)||result.sdkSignals.includes('Google Play Billing'))inferred.push('Paid or subscription functionality may be present.');
-  if(/\b(camera|take photo|capture photo|scan qr|barcode)\b/i.test(prodText)||result.permissions.includes('android.permission.CAMERA'))inferred.push('Camera-related functionality may be present.');
-  if(/\b(location|gps|geofence|nearby)\b/i.test(prodText)||result.permissions.some(p=>p.includes('LOCATION')))inferred.push('Location-related functionality may be present.');
+  if(/(ProcessCameraProvider|CameraSelector|ImageCapture|PreviewView|\bcamera\b|take photo|capture photo|scan qr|barcode)/i.test(prodText)||result.permissions.includes('android.permission.CAMERA'))inferred.push('Camera-related functionality may be present.');
+  if(/(FusedLocationProviderClient|LocationManager|requestLocationUpdates|\blocation\b|gps|geofence|nearby)/i.test(prodText)||result.permissions.some(p=>p.includes('LOCATION')))inferred.push('Location-related functionality may be present.');
   if(/\b(prompt|generative|chatbot|llm)\b/i.test(prodText)||result.sdkSignals.some(s=>/OpenAI|Gemini|Hugging Face/.test(s)))inferred.push('AI-assisted functionality may be present.');
-  if(/\b(notification|push message|firebase messaging)\b/i.test(prodText)||result.permissions.includes('android.permission.POST_NOTIFICATIONS'))inferred.push('Notifications may be present.');
+  if(/(NotificationManager|NotificationCompat|FirebaseMessaging|\bnotification\b|push message)/i.test(prodText)||result.permissions.includes('android.permission.POST_NOTIFICATIONS'))inferred.push('Notifications may be present.');
   if(/\b(roomdatabase|sqlite|local database)\b/i.test(prodText)||result.sdkSignals.includes('Room database'))inferred.push('Some local data capability may be present; runtime verification is required before claiming offline operation.');
   result.inferredFeatures=[...new Set(inferred)];
   result.listingPlan.inferredThemes=result.inferredFeatures;
@@ -181,9 +180,6 @@ export function analyzeSourceFilesWithEvidence(files:Record<string,string>,sourc
     const sdkRequirementSatisfied=!rule.requiredSdk||matchingSdks.length>0;
     if(!permissionRequirementSatisfied||!sdkRequirementSatisfied)continue;
 
-    // A publishable feature needs two independent strong signals:
-    // (1) user-facing source + production implementation, or
-    // (2) production implementation + a required Android permission/SDK integration.
     const platformCorroborated=(matchingPermissions.length+matchingSdks.length)>0;
     if(!(evidence.hasUi||platformCorroborated))continue;
 
@@ -193,7 +189,6 @@ export function analyzeSourceFilesWithEvidence(files:Record<string,string>,sourc
     verifiedUserFeatures.push({name:rule.name,phrase:rule.userPhrase,evidence:[...new Set(support)].slice(0,8)});
   }
 
-  // Permission or SDK presence alone is not a listing claim; only independently corroborated features are publishable themes.
   result.listingPlan.verifiedThemes=verifiedUserFeatures.map(f=>f.name);
   const descriptions=buildDescriptions(result.app.appName,verifiedUserFeatures.map(f=>f.phrase));
   result.listingPlan.shortDescription=descriptions.short;
