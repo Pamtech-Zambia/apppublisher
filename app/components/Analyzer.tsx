@@ -8,11 +8,19 @@ import { analyzeParsedAndroid } from '../../lib/android-binary';
 
 type RepoResponse = { repository?:{owner:string;name:string;defaultBranch:string;visibility:string;htmlUrl?:string}; inspectedTextFiles?:number; inspectedTextBytes?:number; result?:AnalysisResult; error?:string };
 type Props = { onAnalysis?: (result: AnalysisResult) => void };
+type AppInspectModule = typeof import('@h-t-m/app-inspect');
 const severityOrder={BLOCKING:0,REQUIRED_INPUT:1,REVIEW_RISK:2,RECOMMENDATION:3} as const;
 const bytesLabel=(v?:number)=>!v?'0 B':v<1024?`${v} B`:v<1048576?`${(v/1024).toFixed(1)} KB`:`${(v/1048576).toFixed(1)} MB`;
 
+async function loadBrowserInspector():Promise<AppInspectModule>{
+  // Load the package's published browser runtime directly from our own origin.
+  // webpackIgnore is deliberate: rebundling this module rewrites its WASM path.
+  const runtimeUrl='/vendor/app-inspect/index.js';
+  return import(/* webpackIgnore: true */ runtimeUrl) as Promise<AppInspectModule>;
+}
+
 async function analyzeBinary(file: File, kind: 'apk'|'aab'): Promise<AnalysisResult> {
-  const mod = await import('@h-t-m/app-inspect');
+  const mod = await loadBrowserInspector();
   const parser = new mod.AppInfoParser(file);
   const parsed = await parser.parse();
   const pi = parsed.data?.platformInfo;
