@@ -1,10 +1,11 @@
 import JSZip from 'jszip';
-import { analyzeSourceFiles, shouldReadAsText, type AnalysisResult } from './play-analyzer';
+import { shouldReadAsText, type AnalysisResult } from './play-analyzer';
+import { analyzeSourceFilesWithEvidence } from './source-evidence';
 
-const MAX_ARCHIVE_BYTES = 30 * 1024 * 1024;
+const MAX_ARCHIVE_BYTES = 50 * 1024 * 1024;
 const MAX_TEXT_FILE_BYTES = 1024 * 1024;
-const MAX_TOTAL_TEXT_BYTES = 12 * 1024 * 1024;
-const MAX_TEXT_FILES = 1200;
+const MAX_TOTAL_TEXT_BYTES = 20 * 1024 * 1024;
+const MAX_TEXT_FILES = 2000;
 
 export type RepositoryInspection = {
   repository: { owner: string; name: string; defaultBranch: string; visibility: string; htmlUrl?: string };
@@ -42,13 +43,15 @@ export async function inspectPublicRepository(repoUrl: string): Promise<Reposito
   if (metadata.private) throw new Error('This repository is private. Export it as a source ZIP and use the website local-file analyzer.');
   const branch = metadata.default_branch;
   if (!branch || typeof branch !== 'string') throw new Error('Could not determine the repository default branch.');
+
   const archiveUrl = `https://codeload.github.com/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repo)}/zip/refs/heads/${encodeURIComponent(branch)}`;
   const response = await fetch(archiveUrl, { cache: 'no-store' });
   if (!response.ok) throw new Error(`Could not download repository archive (HTTP ${response.status}).`);
   const declaredLength = Number(response.headers.get('content-length') ?? 0);
-  if (declaredLength && declaredLength > MAX_ARCHIVE_BYTES) throw new Error('Repository archive is larger than the 30 MB online-analysis limit. Export a smaller source ZIP or inspect a reduced branch.');
+  if (declaredLength && declaredLength > MAX_ARCHIVE_BYTES) throw new Error('Repository archive is larger than the 50 MB online-analysis limit. Export it as a source ZIP and analyze it locally in the browser.');
   const bytes = Buffer.from(await response.arrayBuffer());
-  if (bytes.length > MAX_ARCHIVE_BYTES) throw new Error('Repository archive is larger than the 30 MB online-analysis limit.');
+  if (bytes.length > MAX_ARCHIVE_BYTES) throw new Error('Repository archive is larger than the 50 MB online-analysis limit.');
+
   const zip = await JSZip.loadAsync(bytes);
   const files: Record<string,string> = {};
   let totalTextBytes = 0, fileCount = 0;
@@ -58,13 +61,15 @@ export async function inspectPublicRepository(repoUrl: string): Promise<Reposito
     if (data.byteLength > MAX_TEXT_FILE_BYTES) continue;
     if (totalTextBytes + data.byteLength > MAX_TOTAL_TEXT_BYTES) break;
     files[path] = new TextDecoder('utf-8', { fatal: false }).decode(data);
-    totalTextBytes += data.byteLength; fileCount += 1;
+    totalTextBytes += data.byteLength;
+    fileCount += 1;
   }
   if (!Object.keys(files).length) throw new Error('No readable Android/source configuration files were found in the repository archive.');
+
   return {
     repository: { owner: parsed.owner, name: parsed.repo, defaultBranch: branch, visibility: 'public', htmlUrl: metadata.html_url },
     inspectedTextFiles: fileCount,
     inspectedTextBytes: totalTextBytes,
-    result: analyzeSourceFiles(files, 'repository'),
+    result: analyzeSourceFilesWithEvidence(files, 'repository'),
   };
 }
