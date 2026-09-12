@@ -106,11 +106,11 @@ function runtimeEndpointEvidence(files: Record<string,string>): { hosts:string[]
   return { hosts:[...hosts], evidence:[...evidence] };
 }
 
-function evidenceForRule(files: Record<string,string>, rule: Rule): { verified:boolean; evidence:string[] } {
+function evidenceForRule(files: Record<string,string>, rule: Rule): { hasUi:boolean; hasImpl:boolean; evidence:string[] } {
   const ui = Object.entries(files).filter(([path,text]) => isUserFacingSource(path) && rule.content.test(text));
   const impl = Object.entries(files).filter(([path,text]) => isProductionCode(path) && rule.content.test(text));
   const evidence = [...new Set([...ui.map(([p])=>p), ...impl.map(([p])=>p)])];
-  return { verified: ui.length > 0 && impl.length > 0 && evidence.length >= 2, evidence:evidence.slice(0,6) };
+  return { hasUi: ui.length > 0, hasImpl: impl.length > 0, evidence:evidence.slice(0,6) };
 }
 
 function sentenceList(items:string[]):string {
@@ -173,22 +173,37 @@ export function analyzeSourceFilesWithEvidence(files:Record<string,string>,sourc
   const verifiedUserFeatures:Array<{name:string;phrase:string;evidence:string[]}>=[];
   for(const rule of featureRules){
     const evidence=evidenceForRule(files,rule);
-    if(!evidence.verified)continue;
-    if(rule.requiredPermission&&!result.permissions.some(p=>rule.requiredPermission!.test(p)))continue;
-    if(rule.requiredSdk&&!result.sdkSignals.some(s=>rule.requiredSdk!.test(s)))continue;
-    verifiedUserFeatures.push({name:rule.name,phrase:rule.userPhrase,evidence:evidence.evidence});
+    if(!evidence.hasImpl)continue;
+
+    const matchingPermissions=rule.requiredPermission ? result.permissions.filter(p=>rule.requiredPermission!.test(p)) : [];
+    const matchingSdks=rule.requiredSdk ? result.sdkSignals.filter(s=>rule.requiredSdk!.test(s)) : [];
+    const permissionRequirementSatisfied=!rule.requiredPermission||matchingPermissions.length>0;
+    const sdkRequirementSatisfied=!rule.requiredSdk||matchingSdks.length>0;
+    if(!permissionRequirementSatisfied||!sdkRequirementSatisfied)continue;
+
+    // A publishable feature needs two independent strong signals:
+    // (1) user-facing source + production implementation, or
+    // (2) production implementation + a required Android permission/SDK integration.
+    const platformCorroborated=(matchingPermissions.length+matchingSdks.length)>0;
+    if(!(evidence.hasUi||platformCorroborated))continue;
+
+    const support=[...evidence.evidence];
+    support.push(...matchingPermissions.map(p=>`Manifest permission: ${p}`));
+    support.push(...matchingSdks.map(s=>`SDK integration: ${s}`));
+    verifiedUserFeatures.push({name:rule.name,phrase:rule.userPhrase,evidence:[...new Set(support)].slice(0,8)});
   }
 
-  // Remove weak themes that came only from permissions/SDK presence; publishable themes are corroborated user-facing features.
+  // Permission or SDK presence alone is not a listing claim; only independently corroborated features are publishable themes.
   result.listingPlan.verifiedThemes=verifiedUserFeatures.map(f=>f.name);
   const descriptions=buildDescriptions(result.app.appName,verifiedUserFeatures.map(f=>f.phrase));
   result.listingPlan.shortDescription=descriptions.short;
   (result.listingPlan as ListingPlanWithFull).fullDescription=descriptions.full;
 
   result.findings=result.findings.filter(f=>!f.title.startsWith('Listing claim supported:'));
+  result.verifiedFacts=result.verifiedFacts.filter(f=>!f.startsWith('Corroborated user-facing feature:'));
   for(const feature of verifiedUserFeatures){
-    if(!result.verifiedFacts.includes(`Corroborated user-facing feature: ${feature.name}.`))result.verifiedFacts.push(`Corroborated user-facing feature: ${feature.name}.`);
-    result.findings.push({severity:'RECOMMENDATION',title:`Listing claim supported: ${feature.name}`,detail:'This feature has both user-facing and production implementation evidence and may be used as a listing draft claim, subject to final runtime verification.',evidence:feature.evidence});
+    result.verifiedFacts.push(`Corroborated user-facing feature: ${feature.name}.`);
+    result.findings.push({severity:'RECOMMENDATION',title:`Listing claim supported: ${feature.name}`,detail:'This feature is supported by production implementation plus independent user-facing/platform evidence and may be used as a listing draft claim, subject to final runtime verification.',evidence:feature.evidence});
   }
 
   return result;
