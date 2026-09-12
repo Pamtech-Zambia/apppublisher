@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   validate:
-    name: Install, type-check and build
+    name: Install, type-check, runtime-test and build
     runs-on: [self-hosted, KASAINSTITUTE]
     timeout-minutes: 20
     permissions:
@@ -33,6 +33,18 @@ jobs:
 
       - name: Type-check
         run: npm run check
+
+      - name: Download pinned APK fixture
+        shell: bash
+        run: |
+          mkdir -p .tmp
+          curl --fail --location --retry 3 --retry-delay 2 \
+            "https://raw.githubusercontent.com/QuoInsight/minimal.apk/585bdb53eb7b8501177ffd7c57ea57d4ec1002af/releases/2.00/quoinsight.apk" \
+            --output .tmp/quoinsight-2.00.apk
+          test "$(wc -c < .tmp/quoinsight-2.00.apk)" -gt 1000000
+
+      - name: Runtime-smoke real APK parser
+        run: node scripts/smoke-apk-parser.mjs .tmp/quoinsight-2.00.apk
 
       - name: Production build
         run: npm run build
