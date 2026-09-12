@@ -54,7 +54,7 @@ function normalized(path: string): string { return path.replace(/\\/g,'/').toLow
 
 function isTestOrDocumentation(path: string): boolean {
   const p = normalized(path);
-  return /(^|\/)(test|tests|androidtest|docs?|documentation|examples?|samples?)(\/|$)/.test(p)
+  return /(^|\/)(test|tests|androidtest|docs?|documentation)(\/|$)/.test(p)
     || /(^|\/)(readme|license|licence|changelog|contributing|code_of_conduct)(\.|$)/.test(p)
     || /gradle\/wrapper/.test(p);
 }
