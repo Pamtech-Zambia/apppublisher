@@ -9,6 +9,8 @@ type Rule = {
   requiredSdk?: RegExp;
 };
 
+type ListingPlanWithFull = AnalysisResult['listingPlan'] & { fullDescription?: string };
+
 const rules: Rule[] = [
   {
     name: 'Translation and dictionary tools',
@@ -119,7 +121,7 @@ export function analyzeSourceFilesWithEvidence(files: Record<string,string>, sou
     result.listingPlan.verifiedThemes = [...new Set([...result.listingPlan.verifiedThemes, ...verifiedUserFeatures.map(f => f.name)])];
     const descriptions = buildDescriptions(result.app.appName, verifiedUserFeatures.map(f => f.phrase));
     result.listingPlan.shortDescription = descriptions.short;
-    result.listingPlan.fullDescription = descriptions.full;
+    (result.listingPlan as ListingPlanWithFull).fullDescription = descriptions.full;
     for (const feature of verifiedUserFeatures) {
       result.verifiedFacts.push(`Corroborated user-facing feature: ${feature.name}.`);
       result.findings.push({
